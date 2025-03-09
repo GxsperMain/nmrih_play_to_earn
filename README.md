@@ -52,6 +52,9 @@ CREATE TABLE nmrih (
 - Run the server normally, players should register their wallets using the command ``!wallet 0x123...``
 
 # Skin Reader
+### Official PTE NMRIH Contract
+- 0x05aFF8c07a51370Eb792FBa3F37B960C39C5243c
+
 This plugin will automatically check players equipped skin in ``nmrih_skins`` table.
 
 Players can use the command ``!tps`` to view themselves in third person
