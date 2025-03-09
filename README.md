@@ -51,5 +51,29 @@ CREATE TABLE nmrih (
 - Now you need to configure your database, go to NoMoreRoomInHell/nmrih/addons/sourcemod/databases.cfg, and add the database credentials
 - Run the server normally, players should register their wallets using the command ``!wallet 0x123...``
 
+# Skin Reader
+This plugin will automatically check players equipped skin in ``nmrih_skins`` table.
+
+Players can use the command ``!tps`` to view themselves in third person
+
+How ID's works? ``??-??`` the firsts numbers is the skin rarity, the second is the skin uniqueid
+
+## Using
+Create a new table for storing player skins and selections
+```sql
+CREATE TABLE nmrih_skins (
+    uniqueid VARCHAR(255) NOT NULL PRIMARY KEY,
+    skinid VARCHAR(255) NOT NULL,
+);
+```
+Copy ``skins_reader`` folder inside ``nmrih/addons/sourcemod/configs
+
+Now you can add your skins in ``skins_id.init`` and ``downloads_list.ini`` to setup ingame skins
+
+Necessary to have a FastDL system setup you can check [here](https://forums.alliedmods.net/showthread.php?p=1225670) a simple tutorial
+
+Everthing should works now, you can edit your database table ``nmrih_skins`` to handle player skins
+
 # Recomendations
 - [Anti Server Lag Exploits](https://forums.alliedmods.net/showthread.php?p=2788390)
+- [Health and Stamina Display](https://forums.alliedmods.net/showthread.php?t=318836)
