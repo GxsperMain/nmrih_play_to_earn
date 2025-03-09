@@ -34,7 +34,7 @@ int         checkBotMaxIdle                 = 240;
 ## Using Database
 - Download [No More Room in Hell](https://nomoreroominhell.fandom.com/wiki/Dedicated_Server_Setup) server files
 - Install [sourcemod](https://www.sourcemod.net/downloads.php) and [metamod](https://www.sourcemm.net/downloads.php/?branch=stable)
-- Install [sm_json](https://github.com/clugg/sm-json) for [sourcemod](https://www.sourcemod.net/downloads.php), just place the addons folder inside TeamFortress2/tf
+- Install [sm_json](https://github.com/clugg/sm-json) for [sourcemod](https://www.sourcemod.net/downloads.php), just place the addons folder inside NoMoreRoomInHell/nmrih
 - Install a database like mysql or mariadb
 - Create a user for the database: GRANT ALL PRIVILEGES ON pte_wallets.* TO 'pte_admin'@'localhost' IDENTIFIED BY 'supersecretpassword' WITH GRANT OPTION; FLUSH PRIVILEGES;
 - Create a table named ``nmrih``:
@@ -76,6 +76,8 @@ Now you can add your skins in ``skins_id.init`` and ``downloads_list.ini`` to se
 Necessary to have a FastDL system setup you can check [here](https://forums.alliedmods.net/showthread.php?p=1225670) a simple tutorial
 
 Everthing should works now, you can edit your database table ``nmrih_skins`` to handle player skins
+
+If you need the entire skin source for generating your own NMRIH server, you should take a look in the PTE NMRIH official discord server
 
 # Recomendations
 - [Anti Server Lag Exploits](https://forums.alliedmods.net/showthread.php?p=2788390)
