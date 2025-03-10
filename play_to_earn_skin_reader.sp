@@ -19,11 +19,11 @@ Database          walletsDB;
 
 static const char SKINS_DOWNLOAD_LIST[] = "addons/sourcemod/configs/skins_reader/downloads_list.ini",
                   SKINS_ID_PATH[]       = "addons/sourcemod/configs/skins_reader/skins_id.init";
+int  TotalSkins                         = 0;
 
-KeyValues KeyValuesSkinsID;
-int       TotalSkins = 0;
+bool bTPView[MAXPLAYERS + 1];
 
-bool      bTPView[MAXPLAYERS + 1];
+bool preCacheModelsOnMapStartup = false;
 
 public void OnPluginStart()
 {
@@ -47,12 +47,12 @@ public void OnPluginStart()
 
 public void OnMapStart()
 {
+    TotalSkins = 0;
     PreCacheModels();
 }
 
 public void OnMapEnd()
 {
-    CloseHandle(KeyValuesSkinsID);
 }
 
 //
@@ -104,7 +104,13 @@ public Action Timer_Spawn(Handle timer, any client)
 //
 stock void ApplyModel(const int client, const char[] model)
 {
-    if (!model[0] || !IsModelPrecached(model)) return;
+    if (preCacheModelsOnMapStartup)
+    {
+        if (!model[0] || !IsModelPrecached(model))
+        {
+            return;
+        }
+    }
 
     SetEntityModel(client, model);
     SetEntityRenderColor(client);
@@ -140,7 +146,22 @@ stock void UpdatePlayerSkin(int client)
             if (GetModelPathByID(skinId, skinPath, sizeof(skinPath)))
             {
                 PrintToServer("[Skin Reader] [UpdatePlayerSkin] Changing player \"%d\" skin to: %s path: %s", steamId, skinId, skinPath);
-                ApplyModel(client, skinPath);
+                if (preCacheModelsOnMapStartup)
+                {
+                    ApplyModel(client, skinPath);
+                }
+                else {
+                    if (!IsModelPrecached(skinPath))
+                    {
+                        PrecacheModel(skinPath);
+                        ApplyModel(client, skinPath);
+                        TotalSkins++;
+                        PrintToServer("[Skin Reader] [UpdatePlayerSkin] TOTAL SKINS IN CACHE: %d", TotalSkins);
+                    }
+                    else {
+                        ApplyModel(client, skinPath);
+                    }
+                }
             }
             else {
                 PrintToServer("[Skin Reader] [UpdatePlayerSkin] ERROR SteamID \"%d\" found. SkinID: %s, BUT THE MODEL IS NOT AVAILABLE INGAME", steamId, skinId);
@@ -198,6 +219,7 @@ stock bool GetModelPathByID(char[] providedSkinID, char[] skinPathBuffer, int sk
 stock void PreCacheModels()
 {
     // LOADING SKINS ID
+    if (preCacheModelsOnMapStartup)
     {
         Handle file = OpenFile(SKINS_ID_PATH, "r");
         if (file == INVALID_HANDLE)

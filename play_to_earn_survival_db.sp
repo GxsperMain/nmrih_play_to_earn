@@ -11,27 +11,28 @@ public Plugin myinfo =
     url         = "https://github.com/GxsperMain/nmrih_play_to_earn"
 };
 
-Database    walletsDB;
+Database walletsDB;
 
-JSON_Object onlinePlayers;    // Stores online players datas `https://wiki.alliedmods.net/Generic_Source_Server_Events#player_connect
+char     onlinePlayers[32][256];
+char     onlinePlayersCount              = 0;
 
-bool        alertNonWalletRegisteredPlayers = true;
-bool        alertPlayerIncomings            = true;
+bool     alertNonWalletRegisteredPlayers = true;
+bool     alertPlayerIncomings            = true;
 
-char        waveRewards[15][20]             = { "100000000000000000", "10000000000000000", "100000000000000000",
+char     waveRewards[15][20]             = { "100000000000000000", "10000000000000000", "100000000000000000",
                              "100000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "300000000000000000" };
-int         maxWaves                        = 15;
-char        waveRewardsShow[15][20]         = { "0.1", "0.1", "0.1",
+int      maxWaves                        = 15;
+char     waveRewardsShow[15][20]         = { "0.1", "0.1", "0.1",
                                  "0.1", "0.2", "0.2",
                                  "0.2", "0.2", "0.2",
                                  "0.2", "0.2", "0.2",
                                  "0.2", "0.2", "0.3" };
 
-int         serverWave                      = 0;
-int         playerAlives                    = 0;
+int      serverWave                      = 0;
+int      playerAlives                    = 0;
 
 public void OnPluginStart()
 {
@@ -45,8 +46,6 @@ public void OnPluginStart()
         PrintToServer("[PTE] The plugin will stop now...");
         return;
     }
-
-    onlinePlayers = new JSON_Object();
 
     // Player connected
     HookEvent("player_connect", OnPlayerConnect, EventHookMode_Post);
@@ -107,10 +106,12 @@ public void OnPlayerConnect(Event event, const char[] name, bool dontBroadcast)
         playerObj.SetInt("index", index);
         playerObj.SetInt("walletStatus", -1);
 
-        char userIdStr[32];
-        IntToString(userId, userIdStr, sizeof(userIdStr));
+        char userData[256];
+        playerObj.Encode(userData, sizeof(userData));
+        json_cleanup_and_delete(playerObj);
 
-        onlinePlayers.SetObject(userIdStr, playerObj);
+        onlinePlayersCount++;
+        onlinePlayers[onlinePlayersCount - 1] = userData;
 
         PrintToServer("[PTE] Player Connected: Name: %s | ID: %d | Index: %d | SteamID: %s | IP: %s | Bot: %d",
                       playerName, userId, index, networkId, address, isBot);
@@ -131,30 +132,8 @@ public void OnPlayerDisconnect(Event event, const char[] name, bool dontBroadcas
 
     if (!isBot)
     {
-        int length     = onlinePlayers.Length;
-        int key_length = 0;
-        for (int i = 0; i < length; i += 1)
-        {
-            key_length = onlinePlayers.GetKeySize(i);
-            char[] key = new char[key_length];
-            onlinePlayers.GetKey(i, key, key_length);
-
-            JSON_Object playerObj = onlinePlayers.GetObject(key);
-            if (playerObj == INVALID_HANDLE)
-            {
-                PrintToServer("[PTE] [OnPlayerDisconnect] ERROR: %s have any invalid player object", key);
-                continue;
-            }
-
-            if (playerObj.GetInt("userId") == userId)
-            {
-                onlinePlayers.Remove(key);
-                playerObj.Cleanup();
-                playerObj = null;
-                json_cleanup_and_delete(playerObj);
-            }
-        }
-
+        onlinePlayersCount--;
+        removePlayerByUserId(userId);
         PrintToServer("[PTE] Player Disconnected: Name: %s | ID: %d | SteamID: %s | Reason: %s | Bot: %d",
                       playerName, userId, networkId, reason, isBot);
     }
@@ -202,18 +181,13 @@ public void OnWaveFinish()
     strcopy(currentEarning, sizeof(currentEarning), waveRewards[indexReward]);
     strcopy(textToShow, sizeof(textToShow), waveRewardsShow[indexReward]);
 
-    int length     = onlinePlayers.Length;
-    int key_length = 0;
+    int length = onlinePlayersCount;
     for (int i = 0; i < length; i += 1)
     {
-        key_length = onlinePlayers.GetKeySize(i);
-        char[] key = new char[key_length];
-        onlinePlayers.GetKey(i, key, key_length);
-
-        JSON_Object playerObj = onlinePlayers.GetObject(key);
-        if (playerObj == INVALID_HANDLE)
+        JSON_Object playerObj = json_decode(onlinePlayers[i]);
+        if (playerObj == null)
         {
-            PrintToServer("[PTE] [OnWaveFinish] ERROR: %s have any invalid player object", key);
+            PrintToServer("[PTE] [OnWaveFinish] ERROR: %d (online index) have any invalid player object: ", i, onlinePlayers[i]);
             continue;
         }
 
@@ -234,6 +208,8 @@ public void OnWaveFinish()
         Format(outputText, sizeof(outputText), "%s PTE", textToShow);
 
         IncrementWallet(GetClientOfUserId(playerObj.GetInt("userId")), currentEarning, outputText, ", for Surviving");
+
+        json_cleanup_and_delete(playerObj);
     }
 
     PrintToServer("[PTE] Wave %d Finished", serverWave);
@@ -241,31 +217,30 @@ public void OnWaveFinish()
 
 public void OnPlayerActive(Event event, const char[] name, bool dontBroadcast)
 {
-    int  userId = event.GetInt("userid");
+    int         userId    = event.GetInt("userid");
 
-    char userIdStr[32];
-    IntToString(userId, userIdStr, sizeof(userIdStr));
-
-    if (!JsonContains(onlinePlayers, userIdStr))
+    JSON_Object playerObj = getPlayerByUserId(userId);
+    if (playerObj == null)
     {
-        PrintToServer("[PTE] [OnPlayerActive] ERROR: Invalid user id, not present in online players");
+        PrintToServer("[PTE] [OnPlayerActive] ERROR: %d have any invalid player object");
         return;
     }
-
-    JSON_Object playerObj = onlinePlayers.GetObject(userIdStr);
 
     if (playerObj.GetInt("walletStatus") == -1)
     {
         int client = GetClientOfUserId(userId);
         if (WalletRegistered(GetSteamAccountID(client)))
         {
+            updateOnlinePlayerByUserId(userId, playerObj);
             playerObj.SetInt("walletStatus", 1);
         }
         else {
-            playerObj.SetInt("walletStatus", 0);
+            updateOnlinePlayerByUserId(userId, playerObj);
             WarnPlayerWithoutWallet(client);
         }
     }
+
+    json_cleanup_and_delete(playerObj);
 
     PrintToServer("[PTE] Player started playing %d", userId);
 }
@@ -277,18 +252,17 @@ public void OnPlayerDie(Event event, const char[] name, bool dontBroadcast)
     playerAlives--;
     PrintToServer("[PTE] Player died %d, Total Alive: %d", userId, playerAlives);
 
-    char userIdStr[32];
-    IntToString(userId, userIdStr, sizeof(userIdStr));
-
-    if (!JsonContains(onlinePlayers, userIdStr))
+    JSON_Object playerObj = getPlayerByUserId(userId);
+    if (playerObj == null)
     {
-        PrintToServer("[PTE] [OnPlayerDie] ERROR: Invalid user id, not present in online players");
+        // Is invalid always when a player disconnects, because disconnect function is called before the dead function
+        // PrintToServer("[PTE] [OnPlayerDie] ERROR: %d have any invalid player object", userId);
         return;
     }
 
-    JSON_Object playerObj = onlinePlayers.GetObject(userIdStr);
-
     playerObj.SetBool("dead", true);
+    updateOnlinePlayerByUserId(userId, playerObj);
+    json_cleanup_and_delete(playerObj);
 }
 
 public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -298,18 +272,16 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
     PrintToServer("[PTE] Player spawned %d", userId);
     playerAlives++;
 
-    char userIdStr[32];
-    IntToString(userId, userIdStr, sizeof(userIdStr));
-
-    if (!JsonContains(onlinePlayers, userIdStr))
+    JSON_Object playerObj = getPlayerByUserId(userId);
+    if (playerObj == null)
     {
-        PrintToServer("[PTE] [OnPlayerSpawn] ERROR: Invalid user id, not present in online players");
+        PrintToServer("[PTE] [OnPlayerSpawn] ERROR: %d have any invalid player object", userId);
         return;
     }
 
-    JSON_Object playerObj = onlinePlayers.GetObject(userIdStr);
-
     playerObj.SetBool("dead", false);
+    updateOnlinePlayerByUserId(userId, playerObj);
+    json_cleanup_and_delete(playerObj);
 }
 //
 //
@@ -331,13 +303,10 @@ public Action CommandRegisterWallet(int client, int args)
 
     if (ValidAddress(walletAddress))
     {
-        char indexStr[32];
-        IntToString(GetClientUserId(client), indexStr, sizeof(indexStr));
-
-        JSON_Object playerObj = onlinePlayers.GetObject(indexStr);
-        if (playerObj == INVALID_HANDLE)
+        JSON_Object playerObj = getPlayerByUserId(GetClientUserId(client));
+        if (playerObj == null)
         {
-            PrintToServer("[PTE] [CommandRegisterWallet] ERROR: %s have any invalid player object", indexStr);
+            PrintToServer("[PTE] [CommandRegisterWallet] ERROR: %d have any invalid player object", client);
             return Plugin_Handled;
         }
 
@@ -391,6 +360,7 @@ public Action CommandRegisterWallet(int client, int args)
                         PrintToChat(client, "Wallet set! you may now receive PTE while playing, have fun");
                         PrintToServer("[PTE] Updated %d wallet to: %s", steamId, walletAddress);
                         playerObj.SetInt("walletStatus", 1);
+                        updateOnlinePlayerByUserId(client, playerObj);
                     }
                 }
             }
@@ -400,6 +370,8 @@ public Action CommandRegisterWallet(int client, int args)
                 PrintToServer("[PTE] Updated %d wallet to: %s", steamId, walletAddress);
             }
         }
+
+        json_cleanup_and_delete(playerObj);
     }
     else {
         PrintToChat(client, "The wallet address provided is invalid, if you need help you can ask in your discord: discord.gg/vGHxVsXc4Q");
@@ -417,24 +389,21 @@ public Action CommandRegisterWallet(int client, int args)
 //
 public Action WarnPlayersWithoutWallet(Handle timer)
 {
-    int length     = onlinePlayers.Length;
-    int key_length = 0;
-    for (int i = 0; i < length; i += 1)
+    for (int i = 0; i < sizeof(onlinePlayers); i++)
     {
-        key_length = onlinePlayers.GetKeySize(i);
-        char[] key = new char[key_length];
-        onlinePlayers.GetKey(i, key, key_length);
-
-        JSON_Object playerObj = onlinePlayers.GetObject(key);
-        if (playerObj == INVALID_HANDLE)
+        if (strlen(onlinePlayers[i]) > 0)
         {
-            PrintToServer("[PTE] [WarnPlayersWithoutWallet] ERROR: %s have any invalid player object", key);
-            return Plugin_Continue;
-        }
+            JSON_Object playerObj = json_decode(onlinePlayers[i]);
+            if (playerObj == null)
+            {
+                PrintToServer("[PTE] [WarnPlayersWithoutWallet] ERROR: %d (online index) have any invalid player object: %s", i, onlinePlayers[i]);
+                continue;
+            }
 
-        if (playerObj.GetInt("walletStatus") == 0)
-        {
-            WarnPlayerWithoutWallet(GetClientOfUserId(playerObj.GetInt("userId")));
+            if (playerObj.GetInt("walletStatus") == 0)
+            {
+                WarnPlayerWithoutWallet(GetClientOfUserId(playerObj.GetInt("userId")));
+            }
         }
     }
     return Plugin_Continue;
@@ -516,24 +485,6 @@ void IncrementWallet(
     }
 }
 
-bool JsonContains(JSON_Object obj, const char[] keyToCheck)
-{
-    int length     = obj.Length;
-    int key_length = 0;
-    for (int i = 0; i < length; i += 1)
-    {
-        key_length = obj.GetKeySize(i);
-        char[] key = new char[key_length];
-        obj.GetKey(i, key, key_length);
-
-        if (StrEqual(keyToCheck, key))
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool ValidAddress(const char[] address)
 {
     char       error[128];
@@ -583,6 +534,89 @@ bool WalletRegistered(const int steamId)
             }
         }
         return false;
+    }
+}
+
+JSON_Object getPlayerByUserId(int userId)
+{
+    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    {
+        if (strlen(onlinePlayers[i]) > 0)
+        {
+            JSON_Object playerObj = json_decode(onlinePlayers[i]);
+            if (playerObj == null)
+            {
+                PrintToServer("[PTE] [getPlayerByUserId] ERROR: %d (online index) have any invalid player object: %s", i, onlinePlayers[i]);
+                continue;
+            }
+
+            if (playerObj.GetInt("userId") == userId)
+            {
+                return playerObj;
+            }
+        }
+    }
+    return null;
+}
+
+void removePlayerByUserId(int userId)
+{
+    // Getting player index to remove
+    int playerIndex = -1;
+    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    {
+        if (strlen(onlinePlayers[i]) > 0)
+        {
+            JSON_Object playerObj = json_decode(onlinePlayers[i]);
+            if (playerObj == null)
+            {
+                PrintToServer("[PTE] [removePlayerByUserId] ERROR: %d (online index) have any invalid player object: %s", i, onlinePlayers[i]);
+                continue;
+            }
+
+            if (playerObj.GetInt("userId") == userId)
+            {
+                playerIndex = i;
+                break;
+            }
+        }
+    }
+    if (playerIndex == -1)
+    {
+        PrintToServer("[PTE] [removePlayerByUserId] ERROR: %d player index no longer exists", userId);
+        return;
+    }
+
+    // Moving values to back
+    for (int i = playerIndex; i < sizeof(onlinePlayers) - 1; i++)
+    {
+        strcopy(onlinePlayers[i], sizeof(onlinePlayers[]), onlinePlayers[i + 1]);
+    }
+
+    // Cleaning last element
+    onlinePlayers[sizeof(onlinePlayers) - 1][0] = '\0';
+}
+
+void updateOnlinePlayerByUserId(int userId, JSON_Object updatedPlayerObj)
+{
+    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    {
+        if (strlen(onlinePlayers[i]) > 0)
+        {
+            JSON_Object playerObj = json_decode(onlinePlayers[i]);
+            if (playerObj == null)
+            {
+                PrintToServer("[PTE] [updateOnlinePlayerByUserId] ERROR: %d (online index) have any invalid player object: %s", i, onlinePlayers[i]);
+                continue;
+            }
+
+            if (playerObj.GetInt("userId") == userId)
+            {
+                char encodedPlayer[256];
+                updatedPlayerObj.Encode(encodedPlayer, sizeof(encodedPlayer));
+                onlinePlayers[i] = encodedPlayer;
+            }
+        }
     }
 }
 //
