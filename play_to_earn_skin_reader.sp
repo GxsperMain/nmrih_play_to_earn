@@ -23,11 +23,13 @@ int  TotalSkins                         = 0;
 
 bool bTPView[MAXPLAYERS + 1];
 
-bool preCacheModelsOnMapStartup = false;
+bool preCacheModelsOnMapStartup   = false;
+
+bool enableDefaultSkinsFor0Rarity = false;
+int  maxAvailableDefaultSkins     = 6;
 
 public void OnPluginStart()
 {
-    PrintToServer("SKIN READER: 1.0");
     char walletDBError[32];
     walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
     if (walletsDB == null)
@@ -68,18 +70,18 @@ stock Action ToggleView(int client, int args)
     if (bTPView[client])
     {
         bTPView[client] = false;
-        SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", 0);
-        SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
-        SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 0);
-        SetEntProp(client, Prop_Send, "m_iFOV", 70);
-    }
-    else
-    {
-        bTPView[client] = true;
         SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", client);
         SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
         SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 1);
         SetEntProp(client, Prop_Send, "m_iFOV", 90);
+    }
+    else
+    {
+        bTPView[client] = true;
+        SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", 0);
+        SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
+        SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 0);
+        SetEntProp(client, Prop_Send, "m_iFOV", 70);
     }
 
     return Plugin_Handled;
@@ -169,6 +171,37 @@ stock void UpdatePlayerSkin(int client)
         }
         else
         {
+            if (enableDefaultSkinsFor0Rarity)
+            {
+                int  skinNumber = GetRandomInt(0, maxAvailableDefaultSkins);
+                char skinId[255];
+                char skinPath[PLATFORM_MAX_PATH];
+                Format(skinId, sizeof(skinId), "0-%d", skinNumber);
+
+                if (GetModelPathByID(skinId, skinPath, sizeof(skinPath)))
+                {
+                    PrintToServer("[Skin Reader] [UpdatePlayerSkin] Changing player \"%d\" default skin to: %s path: %s", steamId, skinId, skinPath);
+                    if (preCacheModelsOnMapStartup)
+                    {
+                        ApplyModel(client, skinPath);
+                    }
+                    else {
+                        if (!IsModelPrecached(skinPath))
+                        {
+                            PrecacheModel(skinPath);
+                            ApplyModel(client, skinPath);
+                            TotalSkins++;
+                            PrintToServer("[Skin Reader] [UpdatePlayerSkin] TOTAL SKINS IN CACHE: %d", TotalSkins);
+                        }
+                        else {
+                            ApplyModel(client, skinPath);
+                        }
+                    }
+                }
+                else {
+                    PrintToServer("[Skin Reader] [UpdatePlayerSkin] ERROR SteamID \"%d\" found. SkinID: %s, BUT THE MODEL IS NOT AVAILABLE INGAME", steamId, skinId);
+                }
+            }
             PrintToServer("[Skin Reader] [UpdatePlayerSkin] SteamID \"%d\" not equipped skin.", steamId);
         }
     }

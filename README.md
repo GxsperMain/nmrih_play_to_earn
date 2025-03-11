@@ -41,7 +41,7 @@ int         checkBotMaxIdle                 = 240;
 ```sql
 CREATE TABLE nmrih (
     uniqueid VARCHAR(255) NOT NULL PRIMARY KEY,
-    walletaddress VARCHAR(255) NOT NULL,
+    walletaddress VARCHAR(255) DEFAULT null,
     value DECIMAL(50, 0) NOT NULL DEFAULT 0
 );
 ```

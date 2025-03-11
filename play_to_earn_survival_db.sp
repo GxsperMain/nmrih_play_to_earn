@@ -11,33 +11,61 @@ public Plugin myinfo =
     url         = "https://github.com/GxsperMain/nmrih_play_to_earn"
 };
 
-Database walletsDB;
+Database  walletsDB;
 
-char     onlinePlayers[32][256];
-char     onlinePlayersCount              = 0;
+char      onlinePlayers[MAXPLAYERS][256];
+char      onlinePlayersCount      = 0;
 
-bool     alertNonWalletRegisteredPlayers = true;
-bool     alertPlayerIncomings            = true;
+bool      alertPlayerIncomings    = true;
 
-char     waveRewards[15][20]             = { "100000000000000000", "10000000000000000", "100000000000000000",
+char      waveRewards[15][20]     = { "100000000000000000", "10000000000000000", "100000000000000000",
                              "100000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "300000000000000000" };
-int      maxWaves                        = 15;
-char     waveRewardsShow[15][20]         = { "0.1", "0.1", "0.1",
+const int maxWaves                = 15;
+char      waveRewardsShow[15][20] = { "0.1", "0.1", "0.1",
                                  "0.1", "0.2", "0.2",
                                  "0.2", "0.2", "0.2",
                                  "0.2", "0.2", "0.2",
                                  "0.2", "0.2", "0.3" };
+int       scorePoints[20]         = { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100 };
+char      scoreRewards[20][20]    = {
+    "100000000000000000",
+    "200000000000000000",
+    "300000000000000000",
+    "400000000000000000",
+    "500000000000000000",
+    "600000000000000000",
+    "700000000000000000",
+    "800000000000000000",
+    "900000000000000000",
+    "1000000000000000000",
+    "1100000000000000000",
+    "1200000000000000000",
+    "1300000000000000000",
+    "1400000000000000000",
+    "1500000000000000000",
+    "1600000000000000000",
+    "1700000000000000000",
+    "1800000000000000000",
+    "1900000000000000000",
+    "2000000000000000000"
+};
 
-int      serverWave                      = 0;
-int      playerAlives                    = 0;
+char scoreRewardsShow[20][20] = { "0.1", "0.2", "0.3",
+                                  "0.4", "0.5", "0.6",
+                                  "0.7", "0.8", "0.9",
+                                  "1.0", "1.1", "1.2", "1.3",
+                                  "1.4", "1.5", "1.6",
+                                  "1.7", "1.8", "1.9",
+                                  "2.0" };
+
+int  serverWave               = 0;
+int  playerAlives             = 0;
 
 public void OnPluginStart()
 {
-    PrintToServer("PLAY TO EARN: 1.1");
-
     char walletDBError[32];
     walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
     if (walletsDB == null)
@@ -52,9 +80,6 @@ public void OnPluginStart()
 
     // Player disconnected
     HookEventEx("player_disconnect", OnPlayerDisconnect, EventHookMode_Post);
-
-    // Wallet command
-    RegConsoleCmd("wallet", CommandRegisterWallet, "Set up your Wallet address");
 
     // Wave Start
     HookEventEx("new_wave", OnWaveStart, EventHookMode_Post);
@@ -71,11 +96,11 @@ public void OnPluginStart()
     // Player spawn
     HookEvent("player_spawn", OnPlayerSpawn, EventHookMode_Post);
 
-    if (alertNonWalletRegisteredPlayers)
-    {
-        // Player Warning
-        CreateTimer(300.0, WarnPlayersWithoutWallet, _, TIMER_REPEAT);
-    }
+    // Wallet command
+    RegConsoleCmd("wallet", CommandRegisterWallet, "Set up your Wallet address");
+
+    // ID command
+    RegConsoleCmd("id", CommandViewSteamId, "View your steam id");
 
     PrintToServer("[PTE] Play to Earn plugin has been initialized");
 }
@@ -152,8 +177,30 @@ public void OnWaveStart(Event event, const char[] name, bool dontBroadcast)
         serverWave++;
     }
 
+    int length = onlinePlayersCount;
+    for (int i = 0; i < length; i += 1)
+    {
+        JSON_Object playerObj = json_decode(onlinePlayers[i]);
+        if (playerObj == null)
+        {
+            PrintToServer("[PTE] [OnWaveFinish] ERROR: %d (online index) have any invalid player object: ", i, onlinePlayers[i]);
+            continue;
+        }
+
+        int client = GetClientOfUserId(playerObj.GetInt("userId"));
+        if (!IsClientInGame(client) || IsFakeClient(client))
+        {
+            continue;
+        }
+
+        int playerScore = GetClientFrags(client);
+        playerObj.SetInt("lastScore", playerScore);
+
+        updateOnlinePlayerByUserId(playerObj.GetInt("userId"), playerObj);
+        json_cleanup_and_delete(playerObj);
+    }
+
     PrintToServer("[PTE] Wave %d Started, supply: %b", serverWave, isSupply);
-    WarnPlayersWithoutWallet(null);
 }
 
 public void OnSurvivalStart(Event event, const char[] name, bool dontBroadcast)
@@ -161,13 +208,11 @@ public void OnSurvivalStart(Event event, const char[] name, bool dontBroadcast)
     serverWave = 0;
 
     PrintToServer("[PTE] Survival Started");
-    WarnPlayersWithoutWallet(null);
 }
 
 public void OnWaveFinish()
 {
     int indexReward = 0;
-    // Minus 1 is required because waves starts in 1 not 0
     if (serverWave > maxWaves)
     {
         indexReward = maxWaves - 1;
@@ -175,11 +220,6 @@ public void OnWaveFinish()
     else {
         indexReward = serverWave - 1;
     }
-
-    char currentEarning[20];
-    char textToShow[20];
-    strcopy(currentEarning, sizeof(currentEarning), waveRewards[indexReward]);
-    strcopy(textToShow, sizeof(textToShow), waveRewardsShow[indexReward]);
 
     int length = onlinePlayersCount;
     for (int i = 0; i < length; i += 1)
@@ -192,8 +232,10 @@ public void OnWaveFinish()
         }
 
         int client = GetClientOfUserId(playerObj.GetInt("userId"));
-        if (IsFakeClient(client)) continue;
-        if (!IsClientInGame(client)) continue;
+        if (IsFakeClient(client) || !IsClientInGame(client))
+        {
+            continue
+        }
 
         char playerName[32];
         playerObj.GetString("playerName", playerName, sizeof(playerName));
@@ -204,10 +246,46 @@ public void OnWaveFinish()
             continue;
         }
 
-        char outputText[32];
-        Format(outputText, sizeof(outputText), "%s PTE", textToShow);
+        // Wave survival reward
+        {
+            char currentEarning[20];
+            char textToShow[20];
+            strcopy(currentEarning, sizeof(currentEarning), waveRewards[indexReward]);
+            strcopy(textToShow, sizeof(textToShow), waveRewardsShow[indexReward]);
+            char outputText[32];
+            Format(outputText, sizeof(outputText), "%s PTE", textToShow);
 
-        IncrementWallet(GetClientOfUserId(playerObj.GetInt("userId")), currentEarning, outputText, ", for Surviving");
+            IncrementWallet(client, currentEarning, outputText, ", for Surviving");
+        }
+
+        // Score reward
+        int scoreDifference = GetClientFrags(client) - playerObj.GetInt("lastScore");
+        PrintToServer("[PTE] %d scored: %d, in this round, total: %d", client, scoreDifference, GetClientFrags(client));
+        if (scoreDifference > 0)
+        {
+            int size = sizeof(scorePoints);
+            int j;
+            for (j = 0; j < size; j++)
+            {
+                PrintToServer("%d < %d ? %b", scorePoints[j], scoreDifference, scorePoints[j] > scoreDifference);
+                if (scorePoints[j] > scoreDifference)
+                {
+                    break;
+                }
+            }
+
+            if (j > 0)
+            {
+                char currentEarning[20];
+                char textToShow[20];
+                strcopy(currentEarning, sizeof(currentEarning), scoreRewards[j - 1]);
+                strcopy(textToShow, sizeof(textToShow), scoreRewardsShow[j - 1]);
+                char outputText[32];
+                Format(outputText, sizeof(outputText), "%s PTE", textToShow);
+
+                IncrementWallet(client, currentEarning, outputText, ", for Scoring");
+            }
+        }
 
         json_cleanup_and_delete(playerObj);
     }
@@ -226,17 +304,25 @@ public void OnPlayerActive(Event event, const char[] name, bool dontBroadcast)
         return;
     }
 
+    int client        = GetClientOfUserId(userId);
+    int clientSteamId = GetSteamAccountID(client);
+
+    if (!PlayerRegistered(clientSteamId))
+    {
+        PrintToServer("[PTE] Player %d not registered, registering...", clientSteamId);
+        RegisterPlayer(clientSteamId);
+    }
+
     if (playerObj.GetInt("walletStatus") == -1)
     {
-        int client = GetClientOfUserId(userId);
-        if (WalletRegistered(GetSteamAccountID(client)))
+        if (WalletRegistered(clientSteamId))
         {
-            updateOnlinePlayerByUserId(userId, playerObj);
             playerObj.SetInt("walletStatus", 1);
+            updateOnlinePlayerByUserId(userId, playerObj);
         }
         else {
+            playerObj.SetInt("walletStatus", 0);
             updateOnlinePlayerByUserId(userId, playerObj);
-            WarnPlayerWithoutWallet(client);
         }
     }
 
@@ -261,6 +347,10 @@ public void OnPlayerDie(Event event, const char[] name, bool dontBroadcast)
     }
 
     playerObj.SetBool("dead", true);
+
+    int playerScore = GetClientFrags(GetClientOfUserId(userId));
+    playerObj.SetInt("lastScore", playerScore);
+
     updateOnlinePlayerByUserId(userId, playerObj);
     json_cleanup_and_delete(playerObj);
 }
@@ -280,6 +370,10 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
     }
 
     playerObj.SetBool("dead", false);
+
+    int playerScore = GetClientFrags(GetClientOfUserId(userId));
+    playerObj.SetInt("lastScore", playerScore);
+
     updateOnlinePlayerByUserId(userId, playerObj);
     json_cleanup_and_delete(playerObj);
 }
@@ -292,6 +386,11 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 //
 public Action CommandRegisterWallet(int client, int args)
 {
+    if (!IsClientConnected(client) || IsFakeClient(client))
+    {
+        return Plugin_Handled;
+    }
+
     if (args < 1)
     {
         PrintToChat(client, "You can set your wallet in your discord: discord.gg/vGHxVsXc4Q");
@@ -380,6 +479,15 @@ public Action CommandRegisterWallet(int client, int args)
     return Plugin_Handled;
 }
 
+public Action CommandViewSteamId(int client, int args)
+{
+    if (IsClientConnected(client) && !IsFakeClient(client))
+    {
+        PrintToChat(client, "[PTE] Your steam id is: %d", GetSteamAccountID(client));
+    }
+
+    return Plugin_Handled;
+}
 //
 //
 //
@@ -420,49 +528,7 @@ void IncrementWallet(
     char[] valueToShow = "0 PTE",
     char[] reason      = ", for Playing")
 {
-    int steamId = GetSteamAccountID(client);
-
-    if (walletsDB == null)
-    {
-        PrintToServer("[PTE] ERROR: database is not connected");
-        return;
-    }
-
-    // Checking player existance in database
-    char checkQuery[128];
-    Format(checkQuery, sizeof(checkQuery),
-           "SELECT COUNT(*) FROM nmrih WHERE uniqueid = '%d';",
-           steamId);
-
-    // Checking the player uniqueid existance
-    DBResultSet hQuery = SQL_Query(walletsDB, checkQuery);
-    if (hQuery == null)
-    {
-        char error[255];
-        SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] Error checking if %d exists: %s", steamId, error);
-        return;
-    }
-    else {
-        while (SQL_FetchRow(hQuery))
-        {
-            int index = SQL_FetchInt(hQuery, 0);
-            if (index == 0)
-            {
-                PrintToServer("[PTE] [IncrementWallet] uniqueid \"%d\" not found.", steamId);
-                return
-            }
-            else if (index > 1) {
-                PrintToServer("[PTE] ERROR: uniqueid \"%d\" is on multiples rows, you setup the database wrongly, please check it. rows: %d", steamId, index);
-                return;
-            }
-            else {
-                PrintToServer("[PTE] [IncrementWallet] uniqueid \"%d\" was found in index. %d", steamId, index);
-                break;
-            }
-        }
-    }
-
+    int  steamId = GetSteamAccountID(client);
     // Updating player in database
     char query[512];
     Format(query, sizeof(query),
@@ -480,7 +546,9 @@ void IncrementWallet(
     else
     {
         if (alertPlayerIncomings)
+        {
             PrintToChat(client, "[PTE] You received: %s%s", valueToShow, reason);
+        }
         PrintToServer("[PTE] Incremented %d value: %s, reason: '%s'", steamId, valueToIncrement, reason);
     }
 }
@@ -505,6 +573,38 @@ bool WalletRegistered(const int steamId)
 {
     char checkQuery[128];
     Format(checkQuery, sizeof(checkQuery),
+           "SELECT COUNT(*) FROM nmrih WHERE walletaddress = '%d';",
+           steamId);
+
+    // Checking the player walletaddress existance
+    DBResultSet hQuery = SQL_Query(walletsDB, checkQuery);
+    if (hQuery == null)
+    {
+        char error[128];
+        SQL_GetError(walletsDB, error, sizeof(error));
+        PrintToServer("[PTE] Error checking if %d exists: %s", steamId, error);
+        return false;
+    }
+    else {
+        while (SQL_FetchRow(hQuery))
+        {
+            int rows = SQL_FetchInt(hQuery, 0);
+            if (rows == 0)
+            {
+                return false;
+            }
+            else {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+bool PlayerRegistered(const int steamId)
+{
+    char checkQuery[128];
+    Format(checkQuery, sizeof(checkQuery),
            "SELECT COUNT(*) FROM nmrih WHERE uniqueid = '%d';",
            steamId);
 
@@ -514,7 +614,7 @@ bool WalletRegistered(const int steamId)
     {
         char error[128];
         SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] Error checking if %s exists: %s", steamId, error);
+        PrintToServer("[PTE] Error checking if %d exists: %s", steamId, error);
         return false;
     }
     else {
@@ -526,8 +626,45 @@ bool WalletRegistered(const int steamId)
                 return false;
             }
             else if (rows > 1) {
-                PrintToServer("[PTE] ERROR: uniqueid \"%s\" is on multiples rows, you setup the database wrongly, please check it. rows: %d", steamId, rows);
+                PrintToServer("[PTE] ERROR: uniqueid \"%d\" is on multiples rows, you setup the database wrongly, please check it. rows: %d", steamId, rows);
                 return false;
+            }
+            else {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+bool RegisterPlayer(const int steamId)
+{
+    char checkQuery[128];
+    Format(checkQuery, sizeof(checkQuery),
+           "INSERT INTO nmrih (uniqueid) VALUES ('%d');",
+           steamId);
+
+    // Checking the player uniqueid existance
+    DBResultSet hQuery = SQL_Query(walletsDB, checkQuery);
+    if (hQuery == null)
+    {
+        char error[128];
+        SQL_GetError(walletsDB, error, sizeof(error));
+        PrintToServer("[PTE] Error registering %d exists: %s", steamId, error);
+        return false;
+    }
+    else {
+        while (SQL_FetchRow(hQuery))
+        {
+            int rows = SQL_GetAffectedRows(hQuery);
+            if (rows == 0)
+            {
+                PrintToServer("[PTE] ERROR: No rows affected when registering for player: %d", steamId);
+                return false;
+            }
+            else if (rows > 1) {
+                PrintToServer("[PTE] ERROR: MULTIPLES ROWS AFFECTED WHILE INSERTING PLAYERS: %d", steamId, rows);
+                return true;
             }
             else {
                 return true;

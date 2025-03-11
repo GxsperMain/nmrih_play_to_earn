@@ -1,4 +1,5 @@
 update-server.sh
+compilers-update.sh
 skins_reader
 skins
 fastdl
