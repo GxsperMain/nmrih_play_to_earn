@@ -10,7 +10,7 @@ contract PlayToEarnNMRIH is ERC721URIStorage, Ownable {
         PlayToEarnCoin(address(0xb88643dA0Bf6d5D7aB15B2Ec074dB38f6285F72A));
 
     uint256[] public availableTokens = [1];
-    uint256[] public rarityCostsIndex = [20000000000000000000];
+    uint256[] public rarityCostIndex = [20000000000000000000];
     uint16[] public rarityChanceIndex = [100];
     uint256 public maxRarityIndex = 0;
 
@@ -25,12 +25,12 @@ contract PlayToEarnNMRIH is ERC721URIStorage, Ownable {
         return _playToEarn.allowance(msg.sender, address(this));
     }
 
-    function mintNFT(uint256 rarity) external payable {
+    function mintNFT(uint256 rarity) external payable returns (uint256) {
         // Check rarity
         require(rarity <= maxRarityIndex, "Invalid rarity number");
 
         // Getting the nft cost
-        uint256 cost = rarityCostsIndex[rarity];
+        uint256 cost = rarityCostIndex[rarity];
 
         // Allowance check
         uint256 userAllowance = _playToEarn.allowance(
@@ -59,10 +59,15 @@ contract PlayToEarnNMRIH is ERC721URIStorage, Ownable {
         // Burning the received coins
         _playToEarn.burnCoin(cost);
 
-        generateNFT(msg.sender, rarityChanceIndex[rarity]);
+        uint256 tokenId = generateNFT(msg.sender, rarityChanceIndex[rarity]);
+        nextTokenId++;
+        return tokenId;
     }
 
-    function generateNFT(address receiverAddress, uint16 rollChance) internal {
+    function generateNFT(address receiverAddress, uint16 rollChance)
+        internal
+        returns (uint256)
+    {
         // Generate rarity
         uint256 rarity = 0;
         for (uint256 i = 0; i < 10; i++) {
@@ -86,7 +91,7 @@ contract PlayToEarnNMRIH is ERC721URIStorage, Ownable {
         // Generating token
         _safeMint(receiverAddress, nextTokenId);
         _setTokenURI(nextTokenId, metadataURI);
-        nextTokenId++;
+        return nextTokenId;
     }
 
     function burnNFT(uint256 tokenId) public {
@@ -120,7 +125,7 @@ contract PlayToEarnNMRIH is ERC721URIStorage, Ownable {
         onlyOwner
     {
         availableTokens.push(1);
-        rarityCostsIndex.push(rarityCost);
+        rarityCostIndex.push(rarityCost);
         rarityChanceIndex.push(rarityChance);
         maxRarityIndex++;
     }

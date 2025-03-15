@@ -14,7 +14,7 @@ public Plugin myinfo =
 Database  walletsDB;
 
 char      onlinePlayers[MAXPLAYERS][256];
-char      onlinePlayersCount      = 0;
+int       onlinePlayersCount      = 0;
 
 bool      alertPlayerIncomings    = true;
 
@@ -52,7 +52,6 @@ char      scoreRewards[20][20]    = {
     "1900000000000000000",
     "2000000000000000000"
 };
-
 char scoreRewardsShow[20][20] = { "0.1", "0.2", "0.3",
                                   "0.4", "0.5", "0.6",
                                   "0.7", "0.8", "0.9",
@@ -95,6 +94,12 @@ public void OnPluginStart()
 
     // Player spawn
     HookEvent("player_spawn", OnPlayerSpawn, EventHookMode_Post);
+
+    // Extraction begin
+    HookEvent("extraction_begin", OnExtractionBegin, EventHookMode_PostNoCopy);
+
+    // Player extracted
+    HookEvent("player_extracted", OnPlayerExtracted, EventHookMode_Post);
 
     // Wallet command
     RegConsoleCmd("wallet", CommandRegisterWallet, "Set up your Wallet address");
@@ -166,6 +171,8 @@ public void OnPlayerDisconnect(Event event, const char[] name, bool dontBroadcas
 
 public void OnWaveStart(Event event, const char[] name, bool dontBroadcast)
 {
+    PrintToServer("[PTE] Online Players: ", onlinePlayersCount);
+
     if (serverWave > 0)
     {
         OnWaveFinish();
@@ -208,6 +215,8 @@ public void OnSurvivalStart(Event event, const char[] name, bool dontBroadcast)
     serverWave = 0;
 
     PrintToServer("[PTE] Survival Started");
+
+    PrintToChatAll("[PTE] Welcome to the official Play To Earn server, our discord: discord.gg/vGHxVsXc4Q");
 }
 
 public void OnWaveFinish()
@@ -267,7 +276,6 @@ public void OnWaveFinish()
             int j;
             for (j = 0; j < size; j++)
             {
-                PrintToServer("%d < %d ? %b", scorePoints[j], scoreDifference, scorePoints[j] > scoreDifference);
                 if (scorePoints[j] > scoreDifference)
                 {
                     break;
@@ -300,7 +308,7 @@ public void OnPlayerActive(Event event, const char[] name, bool dontBroadcast)
     JSON_Object playerObj = getPlayerByUserId(userId);
     if (playerObj == null)
     {
-        PrintToServer("[PTE] [OnPlayerActive] ERROR: %d have any invalid player object");
+        PrintToServer("[PTE] [OnPlayerActive] ERROR: %d have any invalid player object", userId);
         return;
     }
 
@@ -376,6 +384,34 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 
     updateOnlinePlayerByUserId(userId, playerObj);
     json_cleanup_and_delete(playerObj);
+}
+
+public void OnExtractionBegin(Event event, const char[] name, bool dontBroadcast)
+{
+    OnWaveFinish();
+}
+
+public void OnPlayerExtracted(Event event, const char[] name, bool dontBroadcast)
+{
+    int userId = event.GetInt("player_id");
+
+    PrintToServer("[PTE] [OnPlayerExtracted] PLAYER ID: %d", userId);
+    JSON_Object playerObj1 = getPlayerByUserId(userId);
+    if (playerObj1 == null)
+    {
+        PrintToServer("1 -> Nope");
+    }
+    else {
+        PrintToServer("1 -> YES");
+    }
+    JSON_Object playerObj2 = getPlayerByClient(userId);
+    if (playerObj2 == null)
+    {
+        PrintToServer("2 -> Nope");
+    }
+    else {
+        PrintToServer("2 -> YES");
+    }
 }
 //
 //
@@ -732,6 +768,28 @@ void removePlayerByUserId(int userId)
 
     // Cleaning last element
     onlinePlayers[sizeof(onlinePlayers) - 1][0] = '\0';
+}
+
+JSON_Object getPlayerByClient(int client)
+{
+    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    {
+        if (strlen(onlinePlayers[i]) > 0)
+        {
+            JSON_Object playerObj = json_decode(onlinePlayers[i]);
+            if (playerObj == null)
+            {
+                PrintToServer("[PTE] [getPlayerByClient] ERROR: %d (online index) have any invalid player object: %s", i, onlinePlayers[i]);
+                continue;
+            }
+
+            if (playerObj.GetInt("index") == client)
+            {
+                return playerObj;
+            }
+        }
+    }
+    return null;
 }
 
 void updateOnlinePlayerByUserId(int userId, JSON_Object updatedPlayerObj)

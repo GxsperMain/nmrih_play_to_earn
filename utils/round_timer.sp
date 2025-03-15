@@ -29,6 +29,7 @@ public OnPluginStart()
     HookEvent("wave_complete", OnWaveComplete, EventHookMode_PostNoCopy);
     HookEvent("wave_low_zombies", OnWaveAlmostComplete, EventHookMode_PostNoCopy);
     HookEvent("wave_system_end", OnGameEnd, EventHookMode_PostNoCopy);
+    HookEvent("extraction_begin", OnExtractionBegin, EventHookMode_PostNoCopy);
 
     HookEventEx("nmrih_round_begin", OnSurvivalStart, EventHookMode_PostNoCopy);
 }
@@ -83,6 +84,11 @@ public void OnGameEnd(Event event, const char[] name, bool dontBroadcast)
 public void OnSurvivalStart(Event event, const char[] name, bool dontBroadcast)
 {
     currentlyWave = 0;
+}
+
+public void OnExtractionBegin(Event event, const char[] name, bool dontBroadcast)
+{
+    waveTimestamp = -1;
 }
 
 public void OnMapStart()

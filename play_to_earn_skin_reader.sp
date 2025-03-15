@@ -25,7 +25,7 @@ bool bTPView[MAXPLAYERS + 1];
 
 bool preCacheModelsOnMapStartup   = false;
 
-bool enableDefaultSkinsFor0Rarity = false;
+bool enableDefaultSkinsFor0Rarity = true;
 int  maxAvailableDefaultSkins     = 6;
 
 public void OnPluginStart()
@@ -202,7 +202,9 @@ stock void UpdatePlayerSkin(int client)
                     PrintToServer("[Skin Reader] [UpdatePlayerSkin] ERROR SteamID \"%d\" found. SkinID: %s, BUT THE MODEL IS NOT AVAILABLE INGAME", steamId, skinId);
                 }
             }
-            PrintToServer("[Skin Reader] [UpdatePlayerSkin] SteamID \"%d\" not equipped skin.", steamId);
+            else {
+                PrintToServer("[Skin Reader] [UpdatePlayerSkin] SteamID \"%d\" not equipped skin.", steamId);
+            }
         }
     }
 }
