@@ -11,26 +11,26 @@ public Plugin myinfo =
     url         = "https://github.com/GxsperMain/nmrih_play_to_earn"
 };
 
-Database  walletsDB;
+Database    walletsDB;
 
-char      onlinePlayers[MAXPLAYERS][256];
-int       onlinePlayersCount      = 0;
+static char onlinePlayers[MAXPLAYERS][256];
+static int  onlinePlayersCount      = 0;
 
-bool      alertPlayerIncomings    = true;
+bool        alertPlayerIncomings    = true;
 
-char      waveRewards[15][20]     = { "100000000000000000", "10000000000000000", "100000000000000000",
+char        waveRewards[15][20]     = { "100000000000000000", "10000000000000000", "100000000000000000",
                              "100000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "200000000000000000",
                              "200000000000000000", "200000000000000000", "300000000000000000" };
-const int maxWaves                = 15;
-char      waveRewardsShow[15][20] = { "0.1", "0.1", "0.1",
+const int   maxWaves                = 15;
+char        waveRewardsShow[15][20] = { "0.1", "0.1", "0.1",
                                  "0.1", "0.2", "0.2",
                                  "0.2", "0.2", "0.2",
                                  "0.2", "0.2", "0.2",
                                  "0.2", "0.2", "0.3" };
-int       scorePoints[20]         = { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100 };
-char      scoreRewards[20][20]    = {
+int         scorePoints[20]         = { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100 };
+char        scoreRewards[20][20]    = {
     "100000000000000000",
     "200000000000000000",
     "300000000000000000",
@@ -101,6 +101,9 @@ public void OnPluginStart()
     // Player extracted
     HookEvent("player_extracted", OnPlayerExtracted, EventHookMode_Post);
 
+    // Practice ended
+    HookEvent("nmrih_practice_ending", OnPracticeEnded, EventHookMode_PostNoCopy);
+
     // Wallet command
     RegConsoleCmd("wallet", CommandRegisterWallet, "Set up your Wallet address");
 
@@ -140,11 +143,13 @@ public void OnPlayerConnect(Event event, const char[] name, bool dontBroadcast)
         playerObj.Encode(userData, sizeof(userData));
         json_cleanup_and_delete(playerObj);
 
+        onlinePlayers[onlinePlayersCount] = userData;
         onlinePlayersCount++;
-        onlinePlayers[onlinePlayersCount - 1] = userData;
 
         PrintToServer("[PTE] Player Connected: Name: %s | ID: %d | Index: %d | SteamID: %s | IP: %s | Bot: %d",
                       playerName, userId, index, networkId, address, isBot);
+
+        PrintToServer("[PTE] Online Players: %d", onlinePlayersCount);
     }
 }
 
@@ -162,16 +167,18 @@ public void OnPlayerDisconnect(Event event, const char[] name, bool dontBroadcas
 
     if (!isBot)
     {
-        onlinePlayersCount--;
         removePlayerByUserId(userId);
+        onlinePlayersCount--;
         PrintToServer("[PTE] Player Disconnected: Name: %s | ID: %d | SteamID: %s | Reason: %s | Bot: %d",
                       playerName, userId, networkId, reason, isBot);
+
+        PrintToServer("[PTE] Online Players: %d", onlinePlayersCount);
     }
 }
 
 public void OnWaveStart(Event event, const char[] name, bool dontBroadcast)
 {
-    PrintToServer("[PTE] Online Players: ", onlinePlayersCount);
+    PrintToServer("[PTE] Online Players: %d", onlinePlayersCount);
 
     if (serverWave > 0)
     {
@@ -367,8 +374,8 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
     int userId = event.GetInt("userid");
 
-    PrintToServer("[PTE] Player spawned %d", userId);
     playerAlives++;
+    PrintToServer("[PTE] Player spawned %d, Total Alive: %d", userId, playerAlives);
 
     JSON_Object playerObj = getPlayerByUserId(userId);
     if (playerObj == null)
@@ -412,6 +419,11 @@ public void OnPlayerExtracted(Event event, const char[] name, bool dontBroadcast
     else {
         PrintToServer("2 -> YES");
     }
+}
+
+public void OnPracticeEnded(Event event, const char[] name, bool dontBroadcast)
+{
+    playerAlives = 0;
 }
 //
 //
@@ -533,7 +545,7 @@ public Action CommandViewSteamId(int client, int args)
 //
 public Action WarnPlayersWithoutWallet(Handle timer)
 {
-    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    for (int i = 0; i < onlinePlayersCount; i++)
     {
         if (strlen(onlinePlayers[i]) > 0)
         {
@@ -712,7 +724,7 @@ bool RegisterPlayer(const int steamId)
 
 JSON_Object getPlayerByUserId(int userId)
 {
-    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    for (int i = 0; i < onlinePlayersCount; i++)
     {
         if (strlen(onlinePlayers[i]) > 0)
         {
@@ -736,7 +748,7 @@ void removePlayerByUserId(int userId)
 {
     // Getting player index to remove
     int playerIndex = -1;
-    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    for (int i = 0; i < onlinePlayersCount; i++)
     {
         if (strlen(onlinePlayers[i]) > 0)
         {
@@ -761,18 +773,18 @@ void removePlayerByUserId(int userId)
     }
 
     // Moving values to back
-    for (int i = playerIndex; i < sizeof(onlinePlayers) - 1; i++)
+    for (int i = playerIndex; i < onlinePlayersCount - 1; i++)
     {
-        strcopy(onlinePlayers[i], sizeof(onlinePlayers[]), onlinePlayers[i + 1]);
+        strcopy(onlinePlayers[i], onlinePlayersCount, onlinePlayers[i + 1]);
     }
 
     // Cleaning last element
-    onlinePlayers[sizeof(onlinePlayers) - 1][0] = '\0';
+    onlinePlayers[onlinePlayersCount - 1][0] = '\0';
 }
 
 JSON_Object getPlayerByClient(int client)
 {
-    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    for (int i = 0; i < onlinePlayersCount; i++)
     {
         if (strlen(onlinePlayers[i]) > 0)
         {
@@ -794,7 +806,7 @@ JSON_Object getPlayerByClient(int client)
 
 void updateOnlinePlayerByUserId(int userId, JSON_Object updatedPlayerObj)
 {
-    for (int i = 0; i < sizeof(onlinePlayers); i++)
+    for (int i = 0; i < onlinePlayersCount; i++)
     {
         if (strlen(onlinePlayers[i]) > 0)
         {
